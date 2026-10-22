@@ -1,0 +1,9 @@
+model,question_idx,run,response_time,input_tokens,output_tokens,error
+gemini-3.5-flash-lite,1,1,3.4333300590515137,6,810,
+gemini-3.5-flash-lite,1,2,3.1276299953460693,6,635,
+gemini-3.5-flash-lite,2,1,2.837991952896118,6,620,
+gemini-3.5-flash-lite,2,2,2.7879750728607178,6,563,
+gemini-3.5-flash,1,1,12.090506076812744,6,917,
+gemini-3.5-flash,1,2,12.432231903076172,6,970,
+gemini-3.5-flash,2,1,10.02703595161438,6,723,
+gemini-3.5-flash,2,2,10.363615989685059,6,703,
