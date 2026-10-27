@@ -84,7 +84,7 @@ The 4-bit model used only 25% of the memory. Interestingly, format compliance im
 
 ## Homework
 
-**Level chosen**: Basic — changed one CONFIG setting and retrained
+**Level chosen**: Basic and Advanced
 
 **Setting changed**: `lora_r` from `16` → `8` (reduced LoRA rank, fewer trainable parameters)
 
