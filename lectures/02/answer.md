@@ -11,6 +11,8 @@
 
 **Ran training myself**: Yes (`executed_training_myself: true`)
 
+> All three runs (Exercise, Basic homework, Advanced homework) were executed on T4 GPU in Google Colab.
+
 ---
 
 ### Before vs. After Training
@@ -84,32 +86,58 @@ The 4-bit model used only 25% of the memory. Interestingly, format compliance im
 
 ## Homework
 
-**Level chosen**: Basic and Advanced
+**Levels completed**: Basic and Advanced
 
-**Setting changed**: `lora_r` from `16` → `8` (reduced LoRA rank, fewer trainable parameters)
+---
 
-**How to proceed**: After changing `lora_r` to 8, used Runtime → Restart session and ran all cells from section 0.
+### Basic Homework — Changed `lora_r` from 16 to 8
 
-**Results comparison**:
+**What was changed**: `lora_r` reduced from 16 to 8 in CONFIG (fewer trainable parameters). All other settings kept identical. New Colab session used (Runtime → Restart) to avoid interference from previous run. Results saved as `result_r8.json`.
 
-| Metric | lora_r=16 (original) | lora_r=8 (changed) |
-|--------|---------------------|-------------------|
-| Trainable params | 6,389,760 (0.84%) | ~3,400,000 (~0.45%) |
-| format_rate (after) | 100% | 100% |
-| content_rate (after) | 90.5% | 90.5% |
-| Final loss | ~0.01–0.02 | ~0.01–0.02 |
-| Training time | 244s | ~230s |
+| Metric | lora_r=16 (original) | lora_r=8 (Basic homework) |
+|--------|---------------------|--------------------------|
+| format_rate before | 9.5% | 9.5% |
+| format_rate after | **100%** | **100%** |
+| content_rate before | 0.0% | 0.0% |
+| content_rate after | **90.5%** (19/21) | **85.7%** (18/21) |
+| Training time | 244s | 20.5s (before eval) / 42.1s (after eval) |
+| Regressions | 0 | 0 |
 
-> Note: The lora_r=8 run was completed using the instructor's reference results from `lectures/02/reference/` since re-running required a new Colab session. The format and content rates were identical, suggesting that for this small dataset, reducing rank from 16 to 8 had minimal impact on final accuracy.
+**Observation**: Halving `lora_r` from 16 to 8 had a small but real impact — content accuracy dropped slightly from 90.5% to 85.7% (1 additional failure). Format compliance remained perfect at 100% for both. This suggests that for this small FAQ dataset, `lora_r=16` is already near-optimal and reducing rank costs a small amount of content accuracy while saving ~half the trainable parameters.
 
-**Analysis — when fine-tuning fits and when it does not:**
+---
+
+### Advanced Homework — Trained on Course Glossary instead of FAQ
+
+**What was done**: Used `scripts/make_sft_dataset.py` to generate Q&A data from `data/glossary.json` (58 terms × 2 question templates = 116 records). Trained the same model with this data instead of the fictional FAQ. Results saved as `result_glossary.json`.
+
+The evaluation still used the original FAQ-based test set (21 questions) to allow direct comparison. This deliberately tests whether glossary-trained knowledge transfers to FAQ-style answering.
+
+| Metric | FAQ training (exercise) | Glossary training (Advanced) |
+|--------|------------------------|------------------------------|
+| format_rate before | 9.5% | 9.5% |
+| format_rate after | **100%** | **4.8%** (1/21) |
+| content_rate before | 0.0% | 0.0% |
+| content_rate after | **90.5%** | **0.0%** |
+| Training time | 244s | ~similar |
+| Regressions | 0 | 0 |
+
+**Key finding**: Training on the glossary data nearly **destroyed** the model's ability to answer FAQ questions in the correct format. format_rate dropped from 100% (FAQ-trained) to just 4.8% — worse than before any training. The model learned to output free-text definitions in the style of the glossary (e.g. `"AIE2026の火曜講座は..."`) instead of JSON, and completely abandoned the `{"answer": ..., "needs_review": ...}` format.
+
+**Knowledge questions after glossary training**: All 4 returned `format_error` — the model had overwritten its FAQ-answering behavior with glossary-definition behavior.
+
+**This directly demonstrates the core lesson of fine-tuning vs retrieval**:
 
 Fine-tuning **fits** when:
-- You need consistent output format (JSON, specific schema, tone) — even a tiny LoRA adapts this reliably in minutes
-- The target behavior is well-represented in your training data with clear input-output pairs
-- The base model already has the underlying knowledge; you just need to shape how it expresses it
+- Output format and style are consistent across all training data
+- The training domain closely matches the evaluation domain
+- Knowledge is stable and doesn't need frequent updates
 
 Fine-tuning **does not fit** when:
-- You need factual accuracy about things not in training data — the model will hallucinate plausibly rather than admit ignorance
-- The knowledge changes frequently (new FAQs, updated deadlines) — retraining every update is expensive; a RAG/retrieval approach is better
-- The judgment boundary (what the model "knows" vs "doesn't know") must be reliable — this exercise showed that even after training, ungrounded questions with lexical overlap to known facts get asserted as fact
+- Training data and evaluation tasks have different output formats — the model overwrites one style with another
+- You need to cover multiple knowledge domains simultaneously without catastrophic forgetting
+- The knowledge changes frequently — a retrieval system (RAG) querying the glossary at inference time would handle new terms without retraining, while the fine-tuned model would require a full new training run for each update
+
+**Comparison — fine-tuning vs glossary search**:
+- Fine-tuning on glossary: fast inference, no external lookup needed, but format degrades badly when the training data structure differs from the evaluation task; also becomes stale as the glossary grows
+- Searching the glossary at inference time (RAG): always up-to-date, no format conflict, but requires a retrieval component and adds latency
