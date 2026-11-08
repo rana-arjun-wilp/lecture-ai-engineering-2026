@@ -77,3 +77,37 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+def make_quiz(lecture: int) -> str:
+    """Pick one term from the given lecture and return a review question and its answer.
+
+    Use when asked for review questions, such as "Give me a review question for Lecture 2"
+    or "Quiz me on Lecture 1". Picks one term at random from the glossary for the given
+    lecture number and returns a question asking what the term means along with its answer.
+    """
+    glossary = load_glossary()
+    terms = [e for e in glossary if e["lecture"] == lecture]
+    if not terms:
+        available = sorted({e["lecture"] for e in glossary})
+        return json.dumps({"error": f"No terms found for lecture {lecture}. Available lectures: {available}"}, ensure_ascii=False)
+    entry = random.choice(terms)
+    return json.dumps({
+        "question": f'What does "{entry["term"]}" mean?',
+        "answer": entry["definition"],
+        "lecture": entry["lecture"],
+    }, ensure_ascii=False)
+
+
+def save_learning_log(note: str) -> str:
+    """Save a learning note or record to the learning_log folder.
+
+    Use when the user explicitly asks to save, record, or log something they have learned.
+    Saves the note as a timestamped text file in learning_log/.
+    Requires user confirmation before saving because this writes to disk and is hard to undo.
+    """
+    import datetime
+    LOG_DIR.mkdir(exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = LOG_DIR / f"log_{timestamp}.txt"
+    path.write_text(note, encoding="utf-8")
+    return json.dumps({"saved": str(path), "note": note}, ensure_ascii=False)
