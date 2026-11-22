@@ -138,8 +138,21 @@ def search(query: str) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def _query_term_overlap(query: str, page: dict) -> int:
+    """クエリのトークン（2文字以上の単語）がページ本文に何個含まれるかを返す。
+    候補ページを再ランク付けするための簡易的な適合性スコア。
+    """
+    tokens = {t.lower() for t in re.split(r"[\s　，、。、\-/()]+", query) if len(t) >= 2}
+    text = (page.get("title", "") + " " + page.get("content", "")).lower()
+    return sum(1 for t in tokens if t in text)
+
+
 def search_graph(query: str) -> dict:
-    """ベクトル検索を入口に、前後ページと共通用語で候補を広げる。"""
+    """ベクトル検索を入口に、前後ページと共通用語で候補を広げる。
+    Advanced homework improvement: re-rank expanded candidates by query-term overlap
+    so pages that actually mention the queried terms are preferred over structurally
+    adjacent ones that share only a graph edge.
+    """
     pages = {page["page_id"]: page for page in load_pages(RAG_SOURCE)}
     graph = json.loads(RAG_GRAPH.read_text(encoding="utf-8"))
     nodes = {node["id"]: node for node in graph["nodes"]
@@ -164,7 +177,6 @@ def search_graph(query: str) -> dict:
             current, path = queue.popleft()
             if len(path) - 1 >= GRAPH_HOPS:
                 continue
-            # 同じ深さなら、接続先が少ない用語からたどる。
             neighbors = sorted(adjacent[current], key=lambda n: (len(adjacent[n]), n))
             for neighbor in neighbors:
                 if neighbor in visited:
@@ -180,8 +192,15 @@ def search_graph(query: str) -> dict:
                              "path": [{"id": n, "title": nodes[n]["title"]} for n in route]}
                 if neighbor not in candidates or priority < candidates[neighbor][0]:
                     candidates[neighbor] = (priority, candidate)
-    expanded = [candidate for _, candidate in sorted(candidates.values())]
-    return {"seeds": results, "expanded": expanded[:max(0, GRAPH_MAX_RESULTS - len(results))],
+
+    # Re-rank expanded candidates: prefer pages with higher query-term overlap,
+    # falling back to the original graph-distance priority for ties.
+    raw_expanded = [candidate for _, candidate in sorted(candidates.values())]
+    reranked = sorted(
+        raw_expanded,
+        key=lambda p: (-_query_term_overlap(query, p), p["hops"])
+    )
+    return {"seeds": results, "expanded": reranked[:max(0, GRAPH_MAX_RESULTS - len(results))],
             "max_hops": GRAPH_HOPS}
 
 
